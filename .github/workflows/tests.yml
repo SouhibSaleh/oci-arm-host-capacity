@@ -44,12 +44,79 @@ jobs:
             fi
             echo "$key=$value" >> $GITHUB_ENV
           done < /tmp/env_file
+          
+          # Extract and properly format the private key
           python3 << 'EOF'
-          content = open('/tmp/env_file').read()
-          key_start = content.find('OCI_PRIVATE_KEY=') + len('OCI_PRIVATE_KEY=')
-          key_end = content.find('-----END RSA PRIVATE KEY-----') + len('-----END RSA PRIVATE KEY-----')
-          open('/tmp/oci_private.pem', 'w').write(content[key_start:key_end])
+          import re
+          
+          with open('/tmp/env_file', 'r') as f:
+              content = f.read()
+          
+          # Find the private key value
+          match = re.search(r'OCI_PRIVATE_KEY=(.+)', content, re.DOTALL)
+          if match:
+              key_content = match.group(1).strip()
+              
+              # Remove any quotes if present
+              key_content = key_content.strip('"').strip("'")
+              
+              # Ensure proper PEM format with newlines
+              if '-----BEGIN RSA PRIVATE KEY-----' in key_content:
+                  # Split into lines and handle literal \n strings
+                  lines = []
+                  for line in key_content.split('\\n'):
+                      if '\\n' in line:
+                          lines.extend(line.split('\\n'))
+                      else:
+                          lines.append(line)
+                  
+                  # Reconstruct with proper newlines
+                  formatted_key = '\n'.join(lines)
+                  
+                  # Ensure the key has proper line breaks every 64 characters for the body
+                  # But preserve the BEGIN and END lines
+                  if formatted_key.count('\n') < 3:  # Key is on a single line
+                      parts = formatted_key.split('-----')
+                      if len(parts) >= 5:
+                          begin = '-----' + parts[1] + '-----'
+                          end = '-----' + parts[3] + '-----'
+                          body = parts[2].strip()
+                          
+                          # Break the body into 64-character lines
+                          body_lines = [body[i:i+64] for i in range(0, len(body), 64)]
+                          formatted_key = begin + '\n' + '\n'.join(body_lines) + '\n' + end
+              
+              # Write the formatted key
+              with open('/tmp/oci_private.pem', 'w') as f:
+                  f.write(formatted_key)
+                  if not formatted_key.endswith('\n'):
+                      f.write('\n')
+          else:
+              print("OCI_PRIVATE_KEY not found in env_file")
+              exit(1)
           EOF
+          
+          # Validate the key file format
+          echo "=== Key file content (first 3 lines) ==="
+          head -3 /tmp/oci_private.pem
+          echo "=== Key file content (last 3 lines) ==="
+          tail -3 /tmp/oci_private.pem
+          echo "=== Key file line count ==="
+          wc -l /tmp/oci_private.pem
+          
+          # Validate the key using openssl
+          echo "=== Validating private key ==="
+          if openssl rsa -in /tmp/oci_private.pem -check -noout 2>&1; then
+              echo "✓ Private key is valid"
+          else
+              echo "✗ Private key validation failed"
+              echo "Trying to convert and fix..."
+              # Attempt to convert and fix the key
+              openssl rsa -in /tmp/oci_private.pem -out /tmp/oci_private_fixed.pem 2>&1 && \
+              mv /tmp/oci_private_fixed.pem /tmp/oci_private.pem && \
+              echo "✓ Key fixed successfully"
+          fi
+          
           chmod 600 /tmp/oci_private.pem
           echo "OCI_PRIVATE_KEY_FILENAME=/tmp/oci_private.pem" >> $GITHUB_ENV
       - name: Debug private key file
