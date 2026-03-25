@@ -39,9 +39,17 @@ jobs:
         run: |
           echo "${{ secrets.sec1 }}" > /tmp/env_file
           while IFS='=' read -r key value; do
+            if [ "$key" = "OCI_PRIVATE_KEY" ]; then
+              continue
+            fi
             echo "$key=$value" >> $GITHUB_ENV
           done < /tmp/env_file
-          grep 'OCI_PRIVATE_KEY=' /tmp/env_file | cut -d'=' -f2- > /tmp/oci_private.pem
+          python3 -c "
+content = open('/tmp/env_file').read()
+key_start = content.find('OCI_PRIVATE_KEY=') + len('OCI_PRIVATE_KEY=')
+key_end = content.find('-----END RSA PRIVATE KEY-----') + len('-----END RSA PRIVATE KEY-----')
+open('/tmp/oci_private.pem', 'w').write(content[key_start:key_end])
+"
           chmod 600 /tmp/oci_private.pem
           echo "OCI_PRIVATE_KEY_FILENAME=/tmp/oci_private.pem" >> $GITHUB_ENV
       - name: Run test suite
