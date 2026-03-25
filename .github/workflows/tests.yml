@@ -44,12 +44,12 @@ jobs:
             fi
             echo "$key=$value" >> $GITHUB_ENV
           done < /tmp/env_file
-          python3 -c "
-content = open('/tmp/env_file').read()
-key_start = content.find('OCI_PRIVATE_KEY=') + len('OCI_PRIVATE_KEY=')
-key_end = content.find('-----END RSA PRIVATE KEY-----') + len('-----END RSA PRIVATE KEY-----')
-open('/tmp/oci_private.pem', 'w').write(content[key_start:key_end])
-"
+          python3 << 'EOF'
+          content = open('/tmp/env_file').read()
+          key_start = content.find('OCI_PRIVATE_KEY=') + len('OCI_PRIVATE_KEY=')
+          key_end = content.find('-----END RSA PRIVATE KEY-----') + len('-----END RSA PRIVATE KEY-----')
+          open('/tmp/oci_private.pem', 'w').write(content[key_start:key_end])
+          EOF
           chmod 600 /tmp/oci_private.pem
           echo "OCI_PRIVATE_KEY_FILENAME=/tmp/oci_private.pem" >> $GITHUB_ENV
       - name: Run test suite
