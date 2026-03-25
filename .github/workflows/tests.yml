@@ -54,46 +54,49 @@ jobs:
           
           # Find the private key value
           match = re.search(r'OCI_PRIVATE_KEY=(.+)', content, re.DOTALL)
-          if match:
-              key_content = match.group(1).strip()
-              
-              # Remove any quotes if present
-              key_content = key_content.strip('"').strip("'")
-              
-              # Ensure proper PEM format with newlines
-              if '-----BEGIN RSA PRIVATE KEY-----' in key_content:
-                  # Split into lines and handle literal \n strings
-                  lines = []
-                  for line in key_content.split('\\n'):
-                      if '\\n' in line:
-                          lines.extend(line.split('\\n'))
-                      else:
-                          lines.append(line)
-                  
-                  # Reconstruct with proper newlines
-                  formatted_key = '\n'.join(lines)
-                  
-                  # Ensure the key has proper line breaks every 64 characters for the body
-                  # But preserve the BEGIN and END lines
-                  if formatted_key.count('\n') < 3:  # Key is on a single line
-                      parts = formatted_key.split('-----')
-                      if len(parts) >= 5:
-                          begin = '-----' + parts[1] + '-----'
-                          end = '-----' + parts[3] + '-----'
-                          body = parts[2].strip()
-                          
-                          # Break the body into 64-character lines
-                          body_lines = [body[i:i+64] for i in range(0, len(body), 64)]
-                          formatted_key = begin + '\n' + '\n'.join(body_lines) + '\n' + end
-              
-              # Write the formatted key
-              with open('/tmp/oci_private.pem', 'w') as f:
-                  f.write(formatted_key)
-                  if not formatted_key.endswith('\n'):
-                      f.write('\n')
-          else:
+          if not match:
               print("OCI_PRIVATE_KEY not found in env_file")
               exit(1)
+          
+          key_content = match.group(1).strip()
+          
+          # Remove any quotes if present
+          key_content = key_content.strip('"').strip("'")
+          
+          # Initialize formatted_key
+          formatted_key = key_content
+          
+          # Ensure proper PEM format with newlines
+          if '-----BEGIN RSA PRIVATE KEY-----' in key_content:
+              # Split into lines and handle literal \n strings
+              lines = []
+              for line in key_content.split('\\n'):
+                  if '\\n' in line:
+                      lines.extend(line.split('\\n'))
+                  else:
+                      lines.append(line)
+              
+              # Reconstruct with proper newlines
+              formatted_key = '\n'.join(lines)
+              
+              # Ensure the key has proper line breaks every 64 characters for the body
+              # But preserve the BEGIN and END lines
+              if formatted_key.count('\n') < 3:  # Key is on a single line
+                  parts = formatted_key.split('-----')
+                  if len(parts) >= 5:
+                      begin = '-----' + parts[1] + '-----'
+                      end = '-----' + parts[3] + '-----'
+                      body = parts[2].strip()
+                      
+                      # Break the body into 64-character lines
+                      body_lines = [body[i:i+64] for i in range(0, len(body), 64)]
+                      formatted_key = begin + '\n' + '\n'.join(body_lines) + '\n' + end
+          
+          # Write the formatted key
+          with open('/tmp/oci_private.pem', 'w') as f:
+              f.write(formatted_key)
+              if not formatted_key.endswith('\n'):
+                  f.write('\n')
           EOF
           
           # Validate the key file format
