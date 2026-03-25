@@ -36,6 +36,14 @@ jobs:
       - name: Install dependencies
         run: |
           composer update --prefer-dist --no-progress
+      - name: Load secrets
+        run: |
+          echo "${{ secrets.sec1 }}" > /tmp/env_file
+            while IFS='=' read -r key value; do
+          echo "$key=$value" >> $GITHUB_ENV
+            done < /tmp/env_file
+      - name: Run test suite
+        run: vendor/bin/phpunit --color tests/    
       - name: Run test suite
         run: |
           vendor/bin/phpunit --color tests/
