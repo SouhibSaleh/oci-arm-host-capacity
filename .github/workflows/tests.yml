@@ -52,5 +52,15 @@ jobs:
           EOF
           chmod 600 /tmp/oci_private.pem
           echo "OCI_PRIVATE_KEY_FILENAME=/tmp/oci_private.pem" >> $GITHUB_ENV
+      - name: Debug private key file
+        run: |
+          echo "=== First line ==="
+          head -1 /tmp/oci_private.pem
+          echo "=== Last line ==="
+          tail -1 /tmp/oci_private.pem
+          echo "=== Line count ==="
+          wc -l /tmp/oci_private.pem
+          echo "=== File size ==="
+          wc -c /tmp/oci_private.pem
       - name: Run test suite
         run: vendor/bin/phpunit --color tests/
