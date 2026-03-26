@@ -1,4 +1,5 @@
 name: Tests
+
 on:
   push:
     branches:
@@ -6,8 +7,10 @@ on:
   pull_request:
     branches:
       - main
+
   schedule:
     - cron: '*/5 * * * *'
+
 jobs:
   tests:
     runs-on: ubuntu-latest
@@ -16,121 +19,44 @@ jobs:
         php-versions: ['8.3']
     name: integration-tests (PHP ${{ matrix.php-versions }})
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v1
       - name: Install PHP
         uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php-versions }}
       - name: Validate composer.json and composer.lock
         run: composer validate
+
       - name: Get Composer Cache Directory
         id: composer-cache
         run: |
-          echo "dir=$(composer config cache-files-dir)" >> $GITHUB_OUTPUT
-      - uses: actions/cache@v4
+          echo "::set-output name=dir::$(composer config cache-files-dir)"
+      - uses: actions/cache@v2
         with:
           path: ${{ steps.composer-cache.outputs.dir }}
-          key: ${{ runner.os }}-${{ matrix.php-versions }}-composer-${{ hashFiles('**/composer.lock') }}
+          key: ${{ runner.os }}-${{ matrix.php-version }}-composer-${{ matrix.dependencies }}-${{ hashFiles('**/composer.lock') }}
           restore-keys: |
-            ${{ runner.os }}-${{ matrix.php-versions }}-composer-
+            ${{ runner.os }}-${{ matrix.php-version }}-composer-${{ matrix.dependencies }}-
+
       - name: Install dependencies
-        run: composer update --prefer-dist --no-progress
-      - name: Load secrets and write private key
         run: |
-          echo "${{ secrets.sec1 }}" > /tmp/env_file
-          while IFS='=' read -r key value; do
-            if [ "$key" = "OCI_PRIVATE_KEY" ]; then
-              continue
-            fi
-            echo "$key=$value" >> $GITHUB_ENV
-          done < /tmp/env_file
-          
-          # Extract and properly format the private key
-          python3 << 'EOF'
-          import re
-          
-          with open('/tmp/env_file', 'r') as f:
-              content = f.read()
-          
-          # Find the private key value
-          match = re.search(r'OCI_PRIVATE_KEY=(.+)', content, re.DOTALL)
-          if not match:
-              print("OCI_PRIVATE_KEY not found in env_file")
-              exit(1)
-          
-          key_content = match.group(1).strip()
-          
-          # Remove any quotes if present
-          key_content = key_content.strip('"').strip("'")
-          
-          # Initialize formatted_key
-          formatted_key = key_content
-          
-          # Ensure proper PEM format with newlines
-          if '-----BEGIN RSA PRIVATE KEY-----' in key_content:
-              # Split into lines and handle literal \n strings
-              lines = []
-              for line in key_content.split('\\n'):
-                  if '\\n' in line:
-                      lines.extend(line.split('\\n'))
-                  else:
-                      lines.append(line)
-              
-              # Reconstruct with proper newlines
-              formatted_key = '\n'.join(lines)
-              
-              # Ensure the key has proper line breaks every 64 characters for the body
-              # But preserve the BEGIN and END lines
-              if formatted_key.count('\n') < 3:  # Key is on a single line
-                  parts = formatted_key.split('-----')
-                  if len(parts) >= 5:
-                      begin = '-----' + parts[1] + '-----'
-                      end = '-----' + parts[3] + '-----'
-                      body = parts[2].strip()
-                      
-                      # Break the body into 64-character lines
-                      body_lines = [body[i:i+64] for i in range(0, len(body), 64)]
-                      formatted_key = begin + '\n' + '\n'.join(body_lines) + '\n' + end
-          
-          # Write the formatted key
-          with open('/tmp/oci_private.pem', 'w') as f:
-              f.write(formatted_key)
-              if not formatted_key.endswith('\n'):
-                  f.write('\n')
-          EOF
-          
-          # Validate the key file format
-          echo "=== Key file content (first 3 lines) ==="
-          head -3 /tmp/oci_private.pem
-          echo "=== Key file content (last 3 lines) ==="
-          tail -3 /tmp/oci_private.pem
-          echo "=== Key file line count ==="
-          wc -l /tmp/oci_private.pem
-          
-          # Validate the key using openssl
-          echo "=== Validating private key ==="
-          if openssl rsa -in /tmp/oci_private.pem -check -noout 2>&1; then
-              echo "✓ Private key is valid"
-          else
-              echo "✗ Private key validation failed"
-              echo "Trying to convert and fix..."
-              # Attempt to convert and fix the key
-              openssl rsa -in /tmp/oci_private.pem -out /tmp/oci_private_fixed.pem 2>&1 && \
-              mv /tmp/oci_private_fixed.pem /tmp/oci_private.pem && \
-              echo "✓ Key fixed successfully"
-          fi
-          
-          chmod 600 /tmp/oci_private.pem
-          echo "OCI_PRIVATE_KEY_FILENAME=/tmp/oci_private.pem" >> $GITHUB_ENV
-      - name: Debug private key file
-        run: |
-          echo "=== First line ==="
-          head -1 /tmp/oci_private.pem
-          echo "=== Last line ==="
-          tail -1 /tmp/oci_private.pem
-          echo "=== Line count ==="
-          wc -l /tmp/oci_private.pem
-          echo "=== File size ==="
-          wc -c /tmp/oci_private.pem
+          composer update --prefer-dist --no-progress
       - name: Run test suite
-        run: vendor/bin/phpunit --color tests/
+        run: |
+          vendor/bin/phpunit --color tests/
+        env:
+          OCI_REGION: ${{ secrets.OCI_REGION }}
+          OCI_USER_ID: ${{ secrets.OCI_USER_ID }}
+          OCI_TENANCY_ID: ${{ secrets.OCI_TENANCY_ID }}
+          OCI_KEY_FINGERPRINT: ${{ secrets.OCI_KEY_FINGERPRINT }}
+          OCI_PRIVATE_KEY_FILENAME: ${{ secrets.OCI_PRIVATE_KEY_FILENAME }}
+          OCI_AVAILABILITY_DOMAIN: ${{ secrets.OCI_AVAILABILITY_DOMAIN }}
+          OCI_SUBNET_ID: ${{ secrets.OCI_SUBNET_ID }}
+          OCI_IMAGE_ID: ${{ secrets.OCI_IMAGE_ID }}
+          OCI_OCPUS: ${{ secrets.OCI_OCPUS }}
+          OCI_MEMORY_IN_GBS: ${{ secrets.OCI_MEMORY_IN_GBS }}
+          OCI_SHAPE: ${{ secrets.OCI_SHAPE }}
+          OCI_MAX_INSTANCES: ${{ secrets.OCI_MAX_INSTANCES }}
+          OCI_SSH_PUBLIC_KEY: ${{ secrets.OCI_SSH_PUBLIC_KEY }}
+          TELEGRAM_USER_ID: ${{ secrets.TELEGRAM_USER_ID }}
+          TELEGRAM_BOT_API_KEY: ${{ secrets.TELEGRAM_BOT_API_KEY }}
