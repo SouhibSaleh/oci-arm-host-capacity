@@ -41,6 +41,14 @@ jobs:
       - name: Install dependencies
         run: |
           composer install --no-interaction --prefer-dist --no-progress
+      - name: Write OCI private key
+        run: |
+          $keyPath = Join-Path $env:RUNNER_TEMP 'oci_api_key.pem'
+          Set-Content -Path $keyPath -Value $env:OCI_PRIVATE_KEY -NoNewline
+          "OCI_PRIVATE_KEY_FILENAME=$keyPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+        shell: pwsh
+        env:
+          OCI_PRIVATE_KEY: ${{ secrets.OCI_PRIVATE_KEY }}
       - name: Run test suite
         run: |
           vendor/bin/phpunit --color tests/
@@ -49,7 +57,7 @@ jobs:
           OCI_USER_ID: ${{ secrets.OCI_USER_ID }}
           OCI_TENANCY_ID: ${{ secrets.OCI_TENANCY_ID }}
           OCI_KEY_FINGERPRINT: ${{ secrets.OCI_KEY_FINGERPRINT }}
-          OCI_PRIVATE_KEY_FILENAME: ${{ secrets.OCI_PRIVATE_KEY_FILENAME }}
+          OCI_PRIVATE_KEY_FILENAME: ${{ env.OCI_PRIVATE_KEY_FILENAME }}
           OCI_AVAILABILITY_DOMAIN: ${{ secrets.OCI_AVAILABILITY_DOMAIN }}
           OCI_SUBNET_ID: ${{ secrets.OCI_SUBNET_ID }}
           OCI_IMAGE_ID: ${{ secrets.OCI_IMAGE_ID }}
